@@ -64,7 +64,7 @@ class TuringMachine:
             elif line.startswith("START:"):
                 self.start_address = int(line.split(":")[1].strip())
             elif line.startswith("HALT:"):
-                self.halt_address = line.split(":")[1].strip()
+                self.halt_address = [int(x) for x in line.split(":")[1].strip().split(",")]
         self.instruction_pointer = self.start_address
         self.machine_code = lines[4:]
 
@@ -75,7 +75,8 @@ class TuringMachine:
         return tape + [self.blank_symbol] * (100 - len(tape))
 
     def step(self):
-        if self.instruction_pointer == int(self.halt_address):
+        if self.instruction_pointer in self.halt_address:
+            print("Halting at instruction:", self.instruction_pointer)
             return False
         current_symbol = self.tape[self.head]
         instruction_line = self.machine_code[self.instruction_pointer]
