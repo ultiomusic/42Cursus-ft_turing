@@ -1,75 +1,111 @@
 import time
+import json
+
+class Assembler:
+    def __init__(self):
+        self.alphabet = []
+        self.machine_code = """"""
+        self.instructions = []
+        self.labels = {}
+        self.start_address = None
+    
+    def compile(self, json_file):
+        with open(json_file, 'r') as f:
+            code_json = f.read()
+        code = json.loads(code_json)
+        self.alphabet = code["alphabet"]
+        self.blank_symbol = code["blank"]
+        labels = code['transitions'].keys()
+        initial_label = code['initial']
+        for label in labels:
+            self.labels[label] = len(self.instructions)
+            for instruction in code['transitions'][label]:
+                self.instructions.append(instruction)
+        self.start_address = self.labels[initial_label]
+        self.labels['HALT'] = len(self.instructions)
+        self.assemble(code)
+
+    def assemble(self, code):
+        halt_symbols = code['finals']
+        self.machine_code += f"ALPHABET: {','.join(self.alphabet)}\n"
+        self.machine_code += f"BLANK: {self.blank_symbol}\n"
+        self.machine_code += f"START: {self.start_address}\n"
+        self.machine_code += f"HALT: {','.join([str(self.labels[s]) for s in halt_symbols])}\n"
+        for idx, instruction in enumerate(self.instructions):
+            read = instruction['read']
+            to_state = self.labels[instruction['to_state']]
+            write = instruction['write']
+            action = instruction['action']
+            self.machine_code += f"{idx}: READ {read} WRITE {write} MOVE {action} TO {to_state}\n"
+        
+
 
 class TuringMachine:
-    def __init__(
-                 self, 
-                 tape=[],
-                 name="def", 
-                 alphabet=["1", ".", "-", "="], 
-                 blank_symbol=".",
-                 states= [ "scanright", "eraseone", "subone", "skip", "HALT" ],
-                 initial_state="scanright", 
-                 final_states=["HALT"],
-                 transitions=[]
-                 ):
-        self.name = name
-        self.alphabet = alphabet
-        self.blank_symbol = blank_symbol
-        self.states = states
-        self.initial_state = initial_state
-        self.final_states = final_states
-        self.transitions = transitions
+    def __init__(self, tape_str : str, machine_code=""):
+        tape = list(tape_str)
         self.tape = tape
+        self.head = 0
+        self.machine_code = machine_code
+        self.alphabet = []
+        self.blank_symbol = None
+        self.start_address = None
+        self.halt_address = []
+        self.instruction_pointer = 0
+        self.tape = self.load_tape(tape)
+        self.init_code()
 
-        self.current_state = initial_state
-        self.head_position = 0
+    def init_code(self):
+        lines = self.machine_code.strip().split("\n")
+        for line in lines:
+            if line.startswith("ALPHABET:"):
+                self.alphabet = line.split(":")[1].strip().split(",")
+            elif line.startswith("BLANK:"):
+                self.blank_symbol = line.split(":")[1].strip()
+            elif line.startswith("START:"):
+                self.start_address = int(line.split(":")[1].strip())
+            elif line.startswith("HALT:"):
+                self.halt_address = line.split(":")[1].strip()
+        self.instruction_pointer = self.start_address
+        self.machine_code = lines[4:]
 
+    def load_tape(self, tape):
+        print("self.blank_symbol:", self.blank_symbol)
+        if not tape:
+            return [self.blank_symbol] * 100
+        return tape + [self.blank_symbol] * (100 - len(tape))
 
-    def step(self, instruction):
-        current_symbol = self.tape[self.head_position]
-        time.sleep(0.5)
-        print(self.head_position, "tape :", self.tape, "state:", self.current_state)
-        (symbol, new_state, new_symbol, direction) = instruction.values()
-        if current_symbol == symbol:
-            self.tape[self.head_position] = new_symbol
-            self.current_state = new_state
-            if direction == "RIGHT":
-                self.head_position += 1
-            elif direction == "LEFT":
-                self.head_position -= 1
-            return True
-        return False
-
+    def step(self):
+        if self.instruction_pointer == int(self.halt_address):
+            return False
+        current_symbol = self.tape[self.head]
+        instruction_line = self.machine_code[self.instruction_pointer]
+        parts = instruction_line.split()
+        read_symbol = parts[2]
+        write_symbol = parts[4]
+        move_direction = parts[6]
+        to_state = int(parts[8])
+        if current_symbol == read_symbol:
+            self.tape[self.head] = write_symbol
+            if move_direction == "RIGHT":
+                self.head += 1
+            elif move_direction == "LEFT":
+                self.head -= 1
+            self.instruction_pointer = to_state
+        else:
+            self.instruction_pointer += 1
+        print("tape:", self.tape[:20])
+        return True
+    
     def run(self):
-        while self.current_state not in self.final_states:
-            instructions = self.transitions[self.current_state]
-            for instruction in instructions:
-                if self.step(instruction):
-                    break
+        while self.step():
+            pass
+        return self.tape
+        
 
-tape = [".","1", "1", "1", "=", "1", "1", "."]
+comp = Assembler()
+comp.compile("example.json")
+print("Machine Code:\n", comp.machine_code)
+mach = TuringMachine(tape_str="1111-1=", machine_code=comp.machine_code)
+final_tape = mach.run()
+print("Final Tape:", final_tape[:20])
 
-mach = TuringMachine(tape=tape, transitions={
-"scanright": [
-{ "read" : ".", "to_state": "scanright", "write": ".", "action": "RIGHT"},
-{ "read" : "1", "to_state": "scanright", "write": "1", "action": "RIGHT"},
-{ "read" : "-", "to_state": "scanright", "write": "-", "action": "RIGHT"},
-{ "read" : "=", "to_state": "eraseone" , "write": ".", "action": "LEFT" }
-],
-"eraseone": [
-{ "read" : "1", "to_state": "subone", "write": "=", "action": "LEFT"},
-{ "read" : "-", "to_state": "HALT" , "write": ".", "action": "LEFT"}
-],
-"subone": [
-{ "read" : "1", "to_state": "subone", "write": "1", "action": "LEFT"},
-{ "read" : "-", "to_state": "skip" , "write": "-", "action": "LEFT"}
-],
-"skip": [
-{ "read" : ".", "to_state": "skip" , "write": ".", "action": "LEFT"},
-{ "read" : "1", "to_state": "scanright", "write": ".", "action": "RIGHT"}
-]
-})
-
-
-mach.run()
-print(mach.tape)
