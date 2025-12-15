@@ -1,5 +1,6 @@
 import json
 import time
+import argparse
 from functools import reduce
 from itertools import chain
 
@@ -170,15 +171,27 @@ class TuringMachine:
             pass
         return self.tape
 
-if __name__ == "__main__":
+def build_parser():
+    p = argparse.ArgumentParser(prog="ft_turing", add_help=True)
+    p._positionals.title = "positional arguments"
+    p._optionals.title = "optional arguments"
+    p.add_argument("jsonfile", help="json description of the machine")
+    p.add_argument("input", help="input of the machine")
+    return p
+
+def cli(argv=None):
+    args = build_parser().parse_args(argv)
     comp = Assembler()
-    comp.compile("example.json")
+    comp.compile(args.jsonfile)
     print("\n".join(comp.describe_lines(BANNER_WIDTH)))
     mach = TuringMachine(
-        tape_str="1111-1=",
+        tape_str=args.input,
         machine_code=comp.machine_code,
         ip_to_label_fn=comp.ip_to_label,
         addr_to_label_map=comp.addr_to_label()
     )
     final_tape = mach.run()
     print("Final Tape:", final_tape[:20])
+
+if __name__ == "__main__":
+    cli()
