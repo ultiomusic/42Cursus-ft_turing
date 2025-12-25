@@ -1,15 +1,20 @@
 import json
-import time
-import argparse
-from functools import reduce
-from itertools import chain
+import sys
+from dataclasses import dataclass, field, replace
+from itertools import accumulate, chain
+from typing import Dict, Tuple
 
 BANNER_WIDTH = 80
 TAPE_VIEW_WIDTH = 20
 STAR = "*"
 
+LABEL_MAP: Dict[str, int] = {}
+ADDR_TO_LABEL: Dict[int, str] = {}
+
+
 def fmt_bracket(items):
     return "[ " + ", ".join(map(str, items)) + " ]"
+
 
 def banner_lines(name, width=BANNER_WIDTH):
     top = STAR * width
@@ -17,181 +22,221 @@ def banner_lines(name, width=BANNER_WIDTH):
     mid = STAR + " " + name.center(width - 4) + " " + STAR
     return [top, empty, mid, empty, top]
 
-def render_tape(tape, head, blank, width=TAPE_VIEW_WIDTH):
-    def cell(i):
-        v = tape[i] if 0 <= i < len(tape) else None
-        s = blank if v is None else v
-        return f"<{s}>" if i == head else s
-    return "[" + "".join(map(cell, range(width))) + "]"
 
 def format_transition(from_state, read, to_state, write, action):
     return f"({from_state}, {read}) -> ({to_state}, {write}, {action})"
 
-class Assembler:
-    def __init__(self):
-        self.alphabet = []
-        self.machine_code = """"""
-        self.instructions = []
-        self.labels = {}
-        self.start_address = None
-        self._addr_to_label = {}
-        self._json_code = None
 
-    def compile(self, json_file):
-        with open(json_file, "r", encoding="utf-8") as f:
-            code = json.loads(f.read())
-        self._json_code = code
-        self.alphabet = code["alphabet"]
-        self.blank_symbol = code["blank"]
-        labels = code["transitions"].keys()
-        initial_label = code["initial"]
-        for label in labels:
-            self.labels[label] = len(self.instructions)
-            for instruction in code["transitions"][label]:
-                self.instructions.append(instruction)
-        self.start_address = self.labels[initial_label]
-        self.labels["HALT"] = len(self.instructions)
-        self._addr_to_label = {v: k for k, v in self.labels.items()}
-        self.assemble(code)
+def render_tape(tape, head, width=TAPE_VIEW_WIDTH):
+    def cell(i):
+        s = tape[i]
+        return f"<{s}>" if i == head else s
 
-    def assemble(self, code):
-        halt_symbols = code["finals"]
-        self.machine_code += f"ALPHABET: {','.join(self.alphabet)}\n"
-        self.machine_code += f"BLANK: {self.blank_symbol}\n"
-        self.machine_code += f"START: {self.start_address}\n"
-        self.machine_code += f"HALT: {','.join([str(self.labels[s]) for s in halt_symbols])}\n"
-        for idx, instruction in enumerate(self.instructions):
-            read = instruction["read"]
-            to_state = self.labels[instruction["to_state"]]
-            write = instruction["write"]
-            action = instruction["action"]
-            self.machine_code += f"{idx}: READ {read} WRITE {write} MOVE {action} TO {to_state}\n"
+    return "[" + "".join(map(cell, range(width))) + "]"
 
-    def addr_to_label(self):
-        return self._addr_to_label
 
-    def ip_to_label(self, ip):
-        starts = sorted(filter(lambda kv: kv[0] != "HALT", self.labels.items()), key=lambda kv: kv[1])
-        candidates = tuple(filter(lambda kv: kv[1] <= ip, starts))
-        return reduce(lambda acc, kv: kv if kv[1] >= acc[1] else acc, candidates, ("?", -1))[0]
+def ip_to_label(label_map: Dict[str, int], ip: int) -> str:
+    items = sorted(
+        filter(lambda kv: kv[0] != "HALT", label_map.items()),
+        key=lambda kv: kv[1],
+    )
+    best = max(filter(lambda kv: kv[1] <= ip, items), key=lambda kv: kv[1], default=("?", -1))
+    return best[0]
 
-    def describe_lines(self, width=BANNER_WIDTH):
-        code = self._json_code or {}
-        name = code.get("name", "")
-        alphabet = code.get("alphabet", [])
-        states = code.get("states", [])
-        initial = code.get("initial", "")
-        finals = code.get("finals", [])
-        transitions = code.get("transitions", {})
 
-        header = list(chain(
+def describe_lines_from_json(code: Dict, width=BANNER_WIDTH):
+    name = code.get("name", "")
+    alphabet = code.get("alphabet", [])
+    states = code.get("states", [])
+    initial = code.get("initial", "")
+    finals = code.get("finals", [])
+    transitions = code.get("transitions", {})
+
+    header = list(
+        chain(
             banner_lines(name, width),
             [
                 f"Alphabet: {fmt_bracket(alphabet)}",
                 f"States : {fmt_bracket(states)}",
                 f"Initial : {initial}",
                 f"Finals : {fmt_bracket(finals)}",
-            ]
-        ))
-
-        def state_lines(st):
-            ts = transitions.get(st, [])
-            return list(map(
-                lambda t: format_transition(st, t["read"], t["to_state"], t["write"], t["action"]),
-                ts
-            ))
-
-        body = list(chain.from_iterable(map(state_lines, states)))
-        return list(chain(header, body, [STAR * width]))
-
-class TuringMachine:
-    def __init__(self, tape_str: str, machine_code="", ip_to_label_fn=None, addr_to_label_map=None):
-        tape = list(tape_str)
-        self.tape = tape
-        self.head = 0
-        self.machine_code = machine_code
-        self.alphabet = []
-        self.blank_symbol = None
-        self.start_address = None
-        self.halt_address = []
-        self.instruction_pointer = 0
-        self.ip_to_label_fn = ip_to_label_fn or (lambda _ip: "?")
-        self.addr_to_label_map = addr_to_label_map or {}
-        self.tape = self.load_tape(tape)
-        self.init_code()
-
-    def init_code(self):
-        lines = self.machine_code.strip().split("\n")
-        for line in lines:
-            if line.startswith("ALPHABET:"):
-                self.alphabet = line.split(":")[1].strip().split(",")
-            elif line.startswith("BLANK:"):
-                self.blank_symbol = line.split(":")[1].strip()
-            elif line.startswith("START:"):
-                self.start_address = int(line.split(":")[1].strip())
-            elif line.startswith("HALT:"):
-                self.halt_address = [int(x) for x in line.split(":")[1].strip().split(",")]
-        self.instruction_pointer = self.start_address
-        self.machine_code = lines[4:]
-
-    def load_tape(self, tape):
-        if not tape:
-            return [self.blank_symbol] * 100
-        return tape + [self.blank_symbol] * (100 - len(tape))
-
-    def step(self):
-        if self.instruction_pointer in self.halt_address:
-            return False
-
-        instruction_line = self.machine_code[self.instruction_pointer]
-        parts = instruction_line.split()
-        read_symbol = parts[2]
-        write_symbol = parts[4]
-        move_direction = parts[6]
-        to_state_addr = int(parts[8])
-
-        from_state_name = self.ip_to_label_fn(self.instruction_pointer)
-        to_state_name = self.addr_to_label_map.get(to_state_addr, str(to_state_addr))
-
-        tape_view = render_tape(self.tape, self.head, self.blank_symbol, TAPE_VIEW_WIDTH)
-        print(f"{tape_view} {format_transition(from_state_name, read_symbol, to_state_name, write_symbol, move_direction)}")
-
-        current_symbol = self.tape[self.head]
-        if current_symbol == read_symbol:
-            self.tape[self.head] = write_symbol
-            self.head += 1 if move_direction == "RIGHT" else (-1 if move_direction == "LEFT" else 0)
-            self.instruction_pointer = to_state_addr
-        else:
-            self.instruction_pointer += 1
-
-        return True
-
-    def run(self):
-        while self.step():
-            pass
-        return self.tape
-
-def build_parser():
-    p = argparse.ArgumentParser(prog="ft_turing", add_help=True)
-    p._positionals.title = "positional arguments"
-    p._optionals.title = "optional arguments"
-    p.add_argument("jsonfile", help="json description of the machine")
-    p.add_argument("input", help="input of the machine")
-    return p
-
-def cli(argv=None):
-    args = build_parser().parse_args(argv)
-    comp = Assembler()
-    comp.compile(args.jsonfile)
-    print("\n".join(comp.describe_lines(BANNER_WIDTH)))
-    mach = TuringMachine(
-        tape_str=args.input,
-        machine_code=comp.machine_code,
-        ip_to_label_fn=comp.ip_to_label,
-        addr_to_label_map=comp.addr_to_label()
+            ],
+        )
     )
-    final_tape = mach.run()
-    print("Final Tape:", final_tape[:20])
+
+    def state_lines(st):
+        ts = transitions.get(st, [])
+        return list(
+            map(
+                lambda t: format_transition(st, t["read"], t["to_state"], t["write"], t["action"]),
+                ts,
+            )
+        )
+
+    body = list(chain.from_iterable(map(state_lines, states)))
+    return header + body + [STAR * width]
+
+
+def assembler_compile(code: Dict):
+    labels = list(code["transitions"].keys())
+    instruction_blocks = list(map(lambda label: code["transitions"][label], labels))
+    all_instructions = list(chain.from_iterable(instruction_blocks))
+    block_lengths = list(map(len, instruction_blocks))
+    offsets = [0] + list(accumulate(block_lengths))
+    label_map = dict(zip(labels, offsets))
+    label_map = {**label_map, "HALT": len(all_instructions)}
+    return {
+        "alphabet": tuple(code["alphabet"]),
+        "blank_symbol": code["blank"],
+        "instructions": tuple(all_instructions),
+        "labels": label_map,
+        "start_address": label_map[code["initial"]],
+        "finals": tuple(code["finals"]),
+    }
+
+
+def assembler_compile_file(json_file: str):
+    with open(json_file, "r", encoding="utf-8") as f:
+        code_json = f.read()
+    return assembler_compile(json.loads(code_json))
+
+
+@dataclass(frozen=True)
+class TuringMachine_struct:
+    tape: Tuple[str, ...] = field(default_factory=tuple)
+    head: int = 0
+    machine_code: Tuple[str, ...] = field(default_factory=tuple)
+    alphabet: Tuple[str, ...] = field(default_factory=tuple)
+    blank_symbol: str = ""
+    start_address: int = 0
+    halt_address: Tuple[int, ...] = field(default_factory=tuple)
+    instruction_pointer: int = 0
+
+
+def assembler_assemble(compiled):
+    halt_symbols = compiled["finals"]
+
+    header_lines = [
+        f"ALPHABET: {','.join(compiled['alphabet'])}",
+        f"BLANK: {compiled['blank_symbol']}",
+        f"START: {compiled['start_address']}",
+        f"HALT: {','.join(map(lambda s: str(compiled['labels'][s]), halt_symbols))}",
+    ]
+
+    def ins_line(idx_ins):
+        idx, ins = idx_ins
+        return (
+            f"{idx}: READ {ins['read']} WRITE {ins['write']} "
+            f"MOVE {ins['action']} TO {compiled['labels'][ins['to_state']]}"
+        )
+
+    body_lines = list(map(ins_line, enumerate(compiled["instructions"])))
+    return "\n".join(header_lines + body_lines) + "\n"
+
+
+def _parse_machine_code(machine_code: str):
+    lines = machine_code.strip().split("\n")
+    alphabet = tuple(lines[0].split(":")[1].strip().split(","))
+    blank_symbol = lines[1].split(":")[1].strip()
+    start_address = int(lines[2].split(":")[1].strip())
+    halt_address = tuple(map(int, lines[3].split(":")[1].strip().split(",")))
+    instructions = tuple(lines[4:])
+    return {
+        "alphabet": alphabet,
+        "blank_symbol": blank_symbol,
+        "start_address": start_address,
+        "halt_address": halt_address,
+        "instructions": instructions,
+    }
+
+
+def _pad_tape(tape, blank_symbol, size=100):
+    return tuple(tape + [blank_symbol] * max(0, size - len(tape)))
+
+
+def turingmachine_init(tape_str: str, machine_code=""):
+    parsed = _parse_machine_code(machine_code)
+    return TuringMachine_struct(
+        tape=_pad_tape(list(tape_str), parsed["blank_symbol"]),
+        head=0,
+        machine_code=parsed["instructions"],
+        alphabet=parsed["alphabet"],
+        blank_symbol=parsed["blank_symbol"],
+        start_address=parsed["start_address"],
+        halt_address=parsed["halt_address"],
+        instruction_pointer=parsed["start_address"],
+    )
+
+
+def turingmachine_step(machine: TuringMachine_struct):
+    if machine.instruction_pointer in machine.halt_address:
+        return machine, False
+
+    instruction_line = machine.machine_code[machine.instruction_pointer]
+    parts = instruction_line.split()
+    read_symbol, write_symbol = parts[2], parts[4]
+    move_direction, to_state = parts[6], int(parts[8])
+
+    tape_list = list(machine.tape)
+    head = machine.head
+    instruction_pointer = machine.instruction_pointer
+
+    def do_match():
+        from_state = ip_to_label(LABEL_MAP, instruction_pointer)
+        to_state_name = ADDR_TO_LABEL.get(to_state, str(to_state))
+        print(
+            f"{render_tape(machine.tape, head, TAPE_VIEW_WIDTH)} "
+            f"{format_transition(from_state, read_symbol, to_state_name, write_symbol, move_direction)}"
+        )
+
+        tape_list[head] = write_symbol
+        next_head = head + 1 if move_direction == "RIGHT" else head - 1
+        return next_head, to_state
+
+    def do_nomatch():
+        return head, instruction_pointer + 1
+
+    next_head, next_ip = do_match() if tape_list[head] == read_symbol else do_nomatch()
+
+    return (
+        replace(machine, tape=tuple(tape_list), head=next_head, instruction_pointer=next_ip),
+        True,
+    )
+
+
+def turingmachine_run(machine: TuringMachine_struct):
+    def loop(state: TuringMachine_struct):
+        next_state, running = turingmachine_step(state)
+        return loop(next_state) if running else next_state
+
+    return loop(machine)
+
+
+def main():
+    global LABEL_MAP, ADDR_TO_LABEL
+
+    ok = len(sys.argv) == 3
+    if not ok:
+        prog = sys.argv[0] if sys.argv else "ft_turing.py"
+        print(f"usage: {prog} <jsonfile> <input>")
+        raise SystemExit(1)
+
+    jsonfile = sys.argv[1]
+    tape_input = sys.argv[2]
+
+    with open(jsonfile, "r", encoding="utf-8") as f:
+        code = json.loads(f.read())
+
+    compiled = assembler_compile(code)
+    LABEL_MAP = compiled["labels"]
+    ADDR_TO_LABEL = dict(map(lambda kv: (kv[1], kv[0]), LABEL_MAP.items()))
+
+    print("\n".join(describe_lines_from_json(code, BANNER_WIDTH)))
+
+    machine_code = assembler_assemble(compiled)
+    mach = turingmachine_init(tape_str=tape_input, machine_code=machine_code)
+    turingmachine_run(mach)
+
 
 if __name__ == "__main__":
-    cli()
+    main()
