@@ -1,0 +1,31 @@
+{
+  "name": "zero_2n",
+  "alphabet": ["1", "0", "y", "n", "-", "_", "."],
+  "blank": ".",
+  "states": ["check_even", "check_odd", "finish", "HALT", "ERROR"],
+  "initial": "check_even",
+  "finals": ["HALT", "ERROR"],
+  "transitions": {
+    "check_even": [
+      { "read": "0", "to_state": "check_odd", "write": "0", "action": "RIGHT" },
+      { "read": ".", "to_state": "finish", "write": "y", "action": "RIGHT" },
+      { "read": "1", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "_", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "-", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "n", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "y", "to_state": "ERROR", "write": ".", "action": "RIGHT" }
+    ],
+    "check_odd": [
+      { "read": "0", "to_state": "check_even", "write": "0", "action": "RIGHT" },
+      { "read": ".", "to_state": "finish", "write": "n", "action": "RIGHT" },
+      { "read": "1", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "_", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "-", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "n", "to_state": "ERROR", "write": ".", "action": "RIGHT" },
+      { "read": "y", "to_state": "ERROR", "write": ".", "action": "RIGHT" }
+    ],
+    "finish": [
+      { "read": ".", "to_state": "HALT", "write": ".", "action": "RIGHT" }
+    ]
+  }
+}
