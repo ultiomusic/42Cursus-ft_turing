@@ -10,7 +10,7 @@ STAR = "*"
 
 LABEL_MAP: Dict[str, int] = {}
 ADDR_TO_LABEL: Dict[int, str] = {}
-
+STATE_END_MAP: Dict[str, int] = {}
 
 
 def fmt_bracket(items):
@@ -79,10 +79,9 @@ def describe_lines_from_json(code: Dict, width=BANNER_WIDTH):
 
 
 def assembler_compile(code: Dict):
-
     if "transitions" not in code.keys() or not isinstance(code["transitions"], dict):
         raise ValueError("Invalid code: missing 'transitions'")
-    if "alphabet" not in code.keys() or  not isinstance(code["alphabet"], list):
+    if "alphabet" not in code.keys() or not isinstance(code["alphabet"], list):
         raise ValueError("Invalid code: missing 'alphabet'")
     if "blank" not in code.keys() or not isinstance(code["blank"], str):
         raise ValueError("Invalid code: missing 'blank'")
@@ -98,13 +97,15 @@ def assembler_compile(code: Dict):
     offsets = [0] + list(accumulate(block_lengths))
     label_map = dict(zip(labels, offsets))
     label_map = {**label_map, "HALT": len(all_instructions)}
-    
-    
+
+    state_end_map = dict(zip(labels, offsets[1:]))
+
     return {
         "alphabet": tuple(code["alphabet"]),
         "blank_symbol": code["blank"],
         "instructions": tuple(all_instructions),
         "labels": label_map,
+        "state_ends": state_end_map,
         "start_address": label_map[code["initial"]],
         "finals": tuple(code["finals"]),
     }
@@ -187,40 +188,58 @@ def turingmachine_step(machine: TuringMachine_struct):
     if machine.instruction_pointer in machine.halt_address:
         return machine, False
 
-    instruction_line = machine.machine_code[machine.instruction_pointer]
-    parts = instruction_line.split()
-    read_symbol, write_symbol = parts[2], parts[4]
-    move_direction, to_state = parts[6], int(parts[8])
-
-    if read_symbol not in machine.alphabet or write_symbol not in machine.alphabet:
-        raise ValueError("Symbol not in alphabet")
-    
     tape_list = list(machine.tape)
     head = machine.head
-    instruction_pointer = machine.instruction_pointer
+    ip = machine.instruction_pointer
+
     if tape_list[head] not in machine.alphabet:
         raise ValueError("Tape symbol not in alphabet")
-    def do_match():
-        from_state = ip_to_label(LABEL_MAP, instruction_pointer)
+
+    current_state = ip_to_label(LABEL_MAP, ip)
+    state_start = LABEL_MAP.get(current_state, ip)
+    state_end = STATE_END_MAP.get(current_state, state_start)
+
+    block_lines = machine.machine_code[state_start:state_end]
+
+    def parse_line(line: str):
+        parts = line.split()
+        read_symbol = parts[2]
+        write_symbol = parts[4]
+        move_direction = parts[6]
+        to_state = int(parts[8])
+        return read_symbol, write_symbol, move_direction, to_state
+
+    cur_symbol = tape_list[head]
+    parsed_block = tuple(map(parse_line, block_lines))
+
+    match = next(filter(lambda ins: ins[0] == cur_symbol, parsed_block), None)
+
+    def blocked():
+        print(
+            f"{render_tape(machine.tape, head, TAPE_VIEW_WIDTH)} "
+            f"BLOCKED in state {current_state} on symbol {cur_symbol}"
+        )
+        return machine, False
+
+    def matched(ins):
+        read_symbol, write_symbol, move_direction, to_state = ins
+
+        if read_symbol not in machine.alphabet or write_symbol not in machine.alphabet:
+            raise ValueError("Symbol not in alphabet")
+
         to_state_name = ADDR_TO_LABEL.get(to_state, str(to_state))
         print(
             f"{render_tape(machine.tape, head, TAPE_VIEW_WIDTH)} "
-            f"{format_transition(from_state, read_symbol, to_state_name, write_symbol, move_direction)}"
+            f"{format_transition(current_state, read_symbol, to_state_name, write_symbol, move_direction)}"
         )
 
         tape_list[head] = write_symbol
         next_head = head + 1 if move_direction == "RIGHT" else head - 1
-        return next_head, to_state
+        next_ip = to_state
 
-    def do_nomatch():
-        return head, instruction_pointer + 1
+        return replace(machine, tape=tuple(tape_list), head=next_head, instruction_pointer=next_ip), True
 
-    next_head, next_ip = do_match() if tape_list[head] == read_symbol else do_nomatch()
-
-    return (
-        replace(machine, tape=tuple(tape_list), head=next_head, instruction_pointer=next_ip),
-        True,
-    )
+    return blocked() if match is None else matched(match)
 
 
 def turingmachine_run(machine: TuringMachine_struct):
@@ -232,7 +251,7 @@ def turingmachine_run(machine: TuringMachine_struct):
 
 
 def main():
-    global LABEL_MAP, ADDR_TO_LABEL
+    global LABEL_MAP, ADDR_TO_LABEL, STATE_END_MAP
 
     ok = len(sys.argv) == 3
     if not ok:
@@ -248,6 +267,7 @@ def main():
 
     compiled = assembler_compile(code)
     LABEL_MAP = compiled["labels"]
+    STATE_END_MAP = compiled["state_ends"]
     ADDR_TO_LABEL = dict(map(lambda kv: (kv[1], kv[0]), LABEL_MAP.items()))
 
     print("\n".join(describe_lines_from_json(code, BANNER_WIDTH)))

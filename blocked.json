@@ -1,0 +1,13 @@
+{
+  "name": "blocked_demo",
+  "alphabet": ["0", "1", "_"],
+  "blank": "_",
+  "states": ["q0", "HALT"],
+  "initial": "q0",
+  "finals": ["HALT"],
+  "transitions": {
+    "q0": [
+      { "read": "0", "to_state": "HALT", "write": "0", "action": "RIGHT" }
+    ]
+  }
+}
