@@ -1,31 +1,27 @@
 {
-  "name": "unary_add",
-  "alphabet": [ "1", ".", "+" ],
-  "blank": ".",
-  "states": [
-    "skip",
-    "swap_init",
-    "swap_left",
-    "swap_right",
-    "HALT"
-  ],
-  "initial": "skip",
-  "finals": ["HALT"],
-  "transitions": {
-    "skip": [
-      { "read": "1", "to_state": "skip", "write": "1", "action": "RIGHT"},
-      { "read": ".", "to_state": "HALT", "write": ".", "action": "RIGHT"},
-      {"read": "+", "to_state": "swap_init", "write": ".", "action": "RIGHT"}
+    "name" : "unary_add",
+    "alphabet": [ "1", "+", "=", "."],
+    "blank" : ".",
+    "states" : [ "init", "go_to_plus", "go_to_equal", "HALT_OK", "error_plus_expected", "error_equal_expected", "error_invalid_first" ],
+    "initial" : "init",
+    "finals" : [ "HALT_OK" , "error_plus_expected", "error_equal_expected", "error_invalid_first" ],
+    "transitions" : {
+    "init": [
+        { "read" : "+", "to_state": "error_invalid_first" , "write": ".", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_invalid_first" , "write": ".", "action": "RIGHT"},
+        { "read" : "1", "to_state": "go_to_plus", "write": ".", "action": "RIGHT"}
     ],
-    "swap_init": [
-      { "read": "1", "to_state": "swap_left", "write": "1", "action": "LEFT"},
-      { "read": ".", "to_state": "HALT", "write": ".", "action": "RIGHT"}
+    "go_to_plus": [
+        { "read" : "1", "to_state": "go_to_plus", "write": "1", "action": "RIGHT"},
+        { "read" : "+", "to_state": "go_to_equal", "write": "1", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_plus_expected", "write": "=", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_plus_expected", "write": ".", "action": "RIGHT"}
     ],
-    "swap_left": [
-      { "read": ".", "to_state": "swap_right", "write": "1", "action": "RIGHT"}
-    ],
-    "swap_right": [
-      { "read": "1", "to_state": "swap_init", "write": ".", "action": "RIGHT"}
+    "go_to_equal": [
+        { "read" : "1", "to_state": "go_to_equal", "write": "1", "action": "RIGHT"},
+        { "read" : "=", "to_state": "HALT_OK", "write": "=", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_equal_expected", "write": ".", "action": "RIGHT"},
+        { "read" : "+", "to_state": "error_equal_expected", "write": "+", "action": "LEFT"}
     ]
-  }
+    }
 }

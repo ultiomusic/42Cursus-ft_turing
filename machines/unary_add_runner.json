@@ -1,0 +1,74 @@
+{
+    "name" : "unary_add_runner",
+    "alphabet": [ "1", "+", "=", ".", "A", "#" ],
+    "blank" : ".",
+    "states" : [ "init", "seek_hash", "start_expr", "seek_plus", "at_plus", "inspect_after_plus", "convert_old_plus", "finish_set_equal", "HALT_OK", "error_desc_expected", "error_hash_expected", "error_invalid_expr", "error_plus_expected", "error_equal_expected" ],
+    "initial" : "init",
+    "finals" : [ "HALT_OK", "error_desc_expected", "error_hash_expected", "error_invalid_expr", "error_plus_expected", "error_equal_expected" ],
+    "transitions" : {
+    "init": [
+        { "read" : "A", "to_state": "seek_hash", "write": ".", "action": "RIGHT"},
+        { "read" : "1", "to_state": "error_desc_expected", "write": "1", "action": "RIGHT"},
+        { "read" : "+", "to_state": "error_desc_expected", "write": "+", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_desc_expected", "write": "=", "action": "RIGHT"},
+        { "read" : "#", "to_state": "error_desc_expected", "write": "#", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_desc_expected", "write": ".", "action": "RIGHT"}
+    ],
+    "seek_hash": [
+        { "read" : "#", "to_state": "start_expr", "write": ".", "action": "RIGHT"},
+        { "read" : "1", "to_state": "seek_hash", "write": "1", "action": "RIGHT"},
+        { "read" : "+", "to_state": "seek_hash", "write": "+", "action": "RIGHT"},
+        { "read" : "=", "to_state": "seek_hash", "write": "=", "action": "RIGHT"},
+        { "read" : "A", "to_state": "seek_hash", "write": "A", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_hash_expected", "write": ".", "action": "RIGHT"}
+    ],
+    "start_expr": [
+        { "read" : "1", "to_state": "seek_plus", "write": "1", "action": "RIGHT"},
+        { "read" : "+", "to_state": "error_invalid_expr", "write": "+", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_invalid_expr", "write": "=", "action": "RIGHT"},
+        { "read" : "#", "to_state": "error_invalid_expr", "write": "#", "action": "RIGHT"},
+        { "read" : "A", "to_state": "error_invalid_expr", "write": "A", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_invalid_expr", "write": ".", "action": "RIGHT"}
+    ],
+    "seek_plus": [
+        { "read" : "1", "to_state": "seek_plus", "write": "1", "action": "RIGHT"},
+        { "read" : "+", "to_state": "inspect_after_plus", "write": "+", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_plus_expected", "write": "=", "action": "RIGHT"},
+        { "read" : "#", "to_state": "error_plus_expected", "write": "#", "action": "RIGHT"},
+        { "read" : "A", "to_state": "error_plus_expected", "write": "A", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_plus_expected", "write": ".", "action": "RIGHT"}
+    ],
+    "at_plus": [
+        { "read" : "+", "to_state": "inspect_after_plus", "write": "+", "action": "RIGHT"},
+        { "read" : "1", "to_state": "error_invalid_expr", "write": "1", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_invalid_expr", "write": "=", "action": "RIGHT"},
+        { "read" : "#", "to_state": "error_invalid_expr", "write": "#", "action": "RIGHT"},
+        { "read" : "A", "to_state": "error_invalid_expr", "write": "A", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_invalid_expr", "write": ".", "action": "RIGHT"}
+    ],
+    "inspect_after_plus": [
+        { "read" : "1", "to_state": "convert_old_plus", "write": "+", "action": "LEFT"},
+        { "read" : "=", "to_state": "finish_set_equal", "write": ".", "action": "LEFT"},
+        { "read" : "+", "to_state": "error_equal_expected", "write": "+", "action": "RIGHT"},
+        { "read" : "#", "to_state": "error_equal_expected", "write": "#", "action": "RIGHT"},
+        { "read" : "A", "to_state": "error_equal_expected", "write": "A", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_equal_expected", "write": ".", "action": "RIGHT"}
+    ],
+    "convert_old_plus": [
+        { "read" : "+", "to_state": "at_plus", "write": "1", "action": "RIGHT"},
+        { "read" : "1", "to_state": "error_invalid_expr", "write": "1", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_invalid_expr", "write": "=", "action": "RIGHT"},
+        { "read" : "#", "to_state": "error_invalid_expr", "write": "#", "action": "RIGHT"},
+        { "read" : "A", "to_state": "error_invalid_expr", "write": "A", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_invalid_expr", "write": ".", "action": "RIGHT"}
+    ],
+    "finish_set_equal": [
+        { "read" : "+", "to_state": "HALT_OK", "write": "=", "action": "RIGHT"},
+        { "read" : "1", "to_state": "error_invalid_expr", "write": "1", "action": "RIGHT"},
+        { "read" : "=", "to_state": "error_invalid_expr", "write": "=", "action": "RIGHT"},
+        { "read" : "#", "to_state": "error_invalid_expr", "write": "#", "action": "RIGHT"},
+        { "read" : "A", "to_state": "error_invalid_expr", "write": "A", "action": "RIGHT"},
+        { "read" : ".", "to_state": "error_invalid_expr", "write": ".", "action": "RIGHT"}
+    ]
+    }
+}
