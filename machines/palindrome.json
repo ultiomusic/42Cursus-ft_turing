@@ -1,7 +1,7 @@
 
 {
     "name" : "palindrome",
-    "alphabet": [ "1", "0", ".", "b"],
+    "alphabet": [ "1", "0", ".", "b", "y", "n"],
     "blank" : ".",
     "states" : [ "init", "read_1", "read_0", "check_last_is_1", "check_last_is_0", "go_to_beg", "HALT_YES", "HALT_NO" ],
     "initial" : "init",
